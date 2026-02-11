@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="1.0">
+    <head>
+        <title>Hacker News Popular Blogs 2025</title>
+    </head>
+    <body>
+        <outline text="Paul Graham" title="Paul Graham" type="rss" 
+            xmlUrl="http://www.aaronsw.com/2002/feeds/pgessays.rss" htmlUrl="http://www.paulgraham.com/"/>
+        <outline text="Jeff Geerling" title="Jeff Geerling" type="rss" 
+            xmlUrl="https://www.jeffgeerling.com/blog.xml" htmlUrl="https://www.jeffgeerling.com/"/>
+        <outline text="Joel on Software" title="Joel on Software" type="rss" 
+            xmlUrl="https://www.joelonsoftware.com/feed/" htmlUrl="https://www.joelonsoftware.com"/>
+    </body>
+</opml>
