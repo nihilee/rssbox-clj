@@ -103,7 +103,7 @@ RSSBox-CLJ 作为 RSS 阅读器与原始内容之间的中间层，负责把“�
 
 ## 📝 自定义订阅源
 
-修改 `resources/hn-popular-blogs-2025.opml` 文件，添加你想要聚合的博客或新闻源即可。重启服务后生效。
+修改 `resources/hn-popular-blogs-2025.opml (https://t.co/dwAiIjlXet)` 文件，添加你想要聚合的博客或新闻源即可。重启服务后生效。
 
 ## 📄 License
 

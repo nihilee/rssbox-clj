@@ -1,0 +1,24 @@
+<configuration>
+    <!-- 控制台输出 Appender -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <!-- 核心格式配置 -->
+            <!-- %date: 日期 -->
+            <!-- %thread: 线程名 (aggregator, worker-1 等) -->
+            <!-- %-5level: 日志级别 (INFO, WARN) 对齐 -->
+            <!-- %logger{36}: Logger名字 (通常是 namespace) -->
+            <!-- %msg: 你的日志内容 -->
+            <pattern>%date{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 根 Logger 配置 -->
+    <root level="INFO">
+        <appender-ref ref="STDOUT" />
+    </root>
+
+    <!-- (可选) 屏蔽一些太啰嗦的库日志，比如 jetty 或 http-client -->
+    <!-- <logger name="org.eclipse.jetty" level="WARN"/> -->
+    <!-- <logger name="org.apache.http" level="WARN"/> -->
+
+</configuration>

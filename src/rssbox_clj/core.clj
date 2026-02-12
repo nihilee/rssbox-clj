@@ -15,7 +15,7 @@
   (db/init-db!)
 
   ;; 启动 3 个线程处理翻译 (Thread mode)
-  (proc/start-workers! 2)
+  (proc/start-workers! 3)
 
   ;; 启动聚合调度器
   (agg/start-scheduler!)

@@ -16,6 +16,7 @@
 (def model   (config/get-config :openai-model "deepseek-chat"))
 (defonce task-queue (chan 100)) ;; 缓冲减小，避免积压太多
 
+
 ;; --- 这里的 prompt 越短越好 ---
 (def sys-prompt
   "You are a professional translator. Translate the given English text array to Chinese. 
@@ -102,7 +103,9 @@
 (defn process-article-task [{:keys [url title]}]
   (log/info "Processing:" title)
   (try
-    (let [resp (http/get url {:socket-timeout 10000})
+    (let [resp (http/get url {:headers {"User-Agent" config/user-agent}
+                              :socket-timeout 10000
+                              :as :string}) ;; 强制解析为字符串
           reader (Readability4J. url (:body resp))
           article (.parse reader)
           content (.getContent article)]
@@ -135,7 +138,9 @@
 
 ;; 5. Worker 管理
 (defn submit-task [url title]
-  (async/put! task-queue {:url url :title title}))
+  ;; 使用 go 块异步提交，防止阻塞主聚合线程
+  (async/go
+    (async/>! task-queue {:url url :title title})))
 
 (defn start-workers! [n]
   (log/info "Starting" n "workers (Thread mode)...")

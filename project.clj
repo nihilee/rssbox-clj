@@ -14,7 +14,7 @@
                  [org.jsoup/jsoup "1.17.2"]
                  [net.dankito.readability4j/readability4j "1.0.8"]
                  [org.clojure/tools.logging "1.3.0"]
-                 [org.slf4j/slf4j-simple "1.7.36"]
+                 [ch.qos.logback/logback-classic "1.2.13"]
                  [org.clojure/core.async "1.6.681"]
                  [org.clojure/data.xml "0.0.8"]]
   :main ^:skip-aot rssbox-clj.core
