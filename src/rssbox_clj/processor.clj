@@ -151,3 +151,56 @@
         (when-let [task (<!! task-queue)] ;; 使用阻塞读取 <!!
           (process-article-task task)
           (recur))))))
+
+;; --- 升级版审稿人 Prompt ---
+(def reviewer-sys-prompt
+  "你是一个生物信息学和肿瘤学领域的资深科研专家。
+   请根据[文章摘要]和[期刊指标]判断这篇文献是否值得阅读。
+   
+   你的任务：
+   1. 判断是否推荐 (recommend)。
+   2. 如果推荐，请将摘要完整翻译成中文 (abstract_cn)。
+   3. 提取核心创新点 (reason)。
+
+   输出必须是严格的 JSON 格式：
+   {
+     \"recommend\": boolean, 
+     \"title_cn\": \"中文标题\",
+     \"reason\": \"一句话推荐理由，突出创新点\",
+     \"abstract_cn\": \"完整的中文摘要翻译，保持学术严谨性\",
+     \"tags\": [\"关键词1\", \"关键词2\"]
+   }
+   
+   如果 recommend 为 false，其他字段可以为空字符串。
+   ")
+
+(defn review-abstract [{:keys [title abstract journal score institution]}]
+  (try
+    (let [user-content (format
+                        "标题：%s\n期刊：%s (2yr Citedness: %s)\n机构：%s\n摘要：%s"
+                        title 
+                        journal 
+                        (or score "Unknown") 
+                        (or institution "Unknown") 
+                        abstract)
+          
+          body {:model model
+                :messages [{:role "system" :content reviewer-sys-prompt}
+                           {:role "user" :content user-content}]
+                :temperature 0.2 ;; 降低温度，减少幻觉
+                :response_format {:type "json_object"}}
+
+          resp (http/post api-url
+                          {:headers {"Authorization" (str "Bearer " api-key)
+                                     "Content-Type" "application/json"}
+                           :body (json/generate-string body)
+                           :socket-timeout 60000
+                           :conn-timeout 10000})
+
+          raw-content (-> (json/parse-string (:body resp) true) :choices first :message :content)]
+
+      (json/parse-string raw-content true))
+
+    (catch Exception e
+      (log/error "Review failed:" (.getMessage e))
+      nil)))

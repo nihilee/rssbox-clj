@@ -28,3 +28,11 @@
 (defn save-cache! [url title content]
   (jdbc/execute! ds ["INSERT OR REPLACE INTO article_cache (url, title, content, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)"
                      url title content]))
+
+;; 获取最近的推荐文章用于生成 RSS, 过滤掉 [SKIP] 的文章
+(defn get-recent-recommended-articles [limit]
+  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published 
+                      FROM article_cache 
+                      WHERE title LIKE '⭐%' 
+                      ORDER BY updated_at DESC LIMIT ?" limit]
+                     {:builder-fn rs/as-unqualified-maps}))

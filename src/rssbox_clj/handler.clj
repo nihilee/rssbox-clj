@@ -3,6 +3,7 @@
             [compojure.route :as route]
             [ring.util.response :refer [response content-type status]]
             [rssbox-clj.aggregator :as agg]
+            [rssbox-clj.pubmed :as pubmed]
             [cheshire.core :as json]
             [cheshire.generate :as json-gen]))
 
@@ -25,7 +26,17 @@
       (-> (response (json/generate-string data))
           (content-type "application/feed+json; charset=utf-8")))))
 
+;; --- [新增] 处理 PubMed Feed ---
+(defn handle-pubmed-feed []
+  (let [data (pubmed/get-feed)]
+    (if (empty? data)
+      (-> (response (json/generate-string {:title "AI Research Radar" :items [] :note "Initializing Papers..."}))
+          (content-type "application/feed+json; charset=utf-8"))
+      (-> (response (json/generate-string data))
+          (content-type "application/feed+json; charset=utf-8")))))
+
 (defroutes app-routes
   (GET "/feed" [] (handle-feed))
+  (GET "/articles" [] (handle-pubmed-feed))
   (GET "/" [] {:status 200 :body "<h1>RSSBox Running</h1><p><a href='/feed'>/feed</a></p>"})
   (route/not-found "Not Found"))

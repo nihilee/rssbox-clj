@@ -3,7 +3,8 @@
             [rssbox-clj.db :as db]
             [clojure.tools.logging :as log]
             [rssbox-clj.processor :as proc]
-            [rssbox-clj.aggregator :as agg]
+            [rssbox-clj.aggregator :as agg] 
+            [rssbox-clj.pubmed :as pubmed]
             [rssbox-clj.config :as config]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :refer [wrap-params]])
@@ -19,6 +20,9 @@
 
   ;; 启动聚合调度器
   (agg/start-scheduler!)
+  
+  ;; [新增] 启动 PubMed 文献聚合
+  (pubmed/start-scheduler!)
 
   (let [port (Integer/parseInt (str (config/get-config :port 8000)))]
     (log/info "Server running on http://localhost:" port)

@@ -20,3 +20,11 @@
   ([key default] (get (read-config) key default)))
 
 (def user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+
+;; --- [新增] PubMed 相关配置 ---
+(def pubmed-search-term
+  (get-config :pubmed-query
+              "(\"Bioinformatics\"[MeSH] OR \"Computational Biology\"[MeSH] OR \"Neoplasms\"[MeSH]) AND (2024/01/01:3000/12/31[Date - Publication])"))
+
+(def pubmed-min-citedness
+  (get-config :pubmed-min-score 3.0))
