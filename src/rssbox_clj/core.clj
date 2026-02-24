@@ -22,7 +22,7 @@
   ;; 启动聚合调度器
   (agg/start-scheduler!)
   (fetcher/start-scheduler!)
-  (immune-fetcher/start-scheduler!)
+  ;; (immune-fetcher/start-scheduler!)
 
   (let [port (Integer/parseInt (str (config/get-config :port 8000)))]
     (log/info "Server running on http://localhost:" port)

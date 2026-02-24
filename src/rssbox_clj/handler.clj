@@ -56,6 +56,6 @@
 (defroutes app-routes
   (GET "/feed" [] (handle-feed))
   (GET "/articles" [] (handle-articles-feed))
-  (GET "/immune-articles" [] (handle-immune-articles-feed))
+  ;; (GET "/immune-articles" [] (handle-immune-articles-feed))
   (GET "/" [] {:status 200 :body "<h1>RSSBox Running (v2)</h1><p><a href='/feed'>/feed</a></p><p><a href='/articles'>/articles</a></p>"})
   (route/not-found "Not Found"))

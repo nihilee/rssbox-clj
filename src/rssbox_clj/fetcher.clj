@@ -160,41 +160,22 @@
         source-display (if (= "preprint" (:type paper)) "Preprint" journal-display)
         date-display (if (:date paper) (:date paper) "")
 
-        ;; [优化] 指标显示逻辑
+        ;; 指标显示逻辑
         score-display (if (:score paper) (format "IF: %.1f" (:score paper)) "")
         cited-display (if (:cited_by paper) (str "Cited: " (:cited_by paper)) "-")
-
-        ;; 优先显示百分位
         perc-display (if (:percentile paper)
                        (format "Top %.1f%%" (- 100.0 (:percentile paper)))
                        "New")
 
-        ;; 公共 CSS
+        ;; 公共 CSS (主要针对支持样式的阅读器和浏览器，保留基础美化)
         common-css "
         <style>
-          .rssbox-card { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; max-width: 800px; background: #fff; }
+          .rssbox-card { font-family: -apple-system, sans-serif; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; max-width: 800px; background: #fff; }
           .rssbox-header h2 { font-size: 1.4rem; color: #111827; line-height: 1.3; margin-bottom: 12px; }
-          
-          /* [优化] Meta 分行 */
-          .rssbox-meta { font-size: 0.9rem; color: #6b7280; margin-bottom: 16px; line-height: 1.6; }
-          .meta-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-          
-          .rssbox-btn { display: inline-block; background: #2563eb; color: #fff; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 0.9rem; }
-          .rssbox-btn:hover { background: #1d4ed8; }
-          
-          .abstract-content { font-size: 1rem; color: #374151; line-height: 1.7; margin-top: 15px; }
-          .abstract-content .en { margin-bottom: 12px; }
-          .abstract-content .cn { color: #4b5563; margin-bottom: 20px; border-left: 3px solid #e5e7eb; padding-left: 12px; font-size: 0.95em; background: #f9fafb; padding-top:4px; padding-bottom:4px;}
-          
-          .box-recommend { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin-bottom: 20px; border-radius: 0 4px 4px 0; }
-          .text-rec-title { color: #15803d; font-weight: bold; margin: 0; }
-          .text-rec-body { color: #14532d; margin: 8px 0 0 0; }
-          .badge-rec { background:#dcfce7; color:#15803d; padding:2px 8px; border-radius:4px; font-size:0.85em; font-weight:normal; margin-left: auto; }
-
-          .box-reject { background: #f3f4f6; border-left: 4px solid #9ca3af; padding: 12px 16px; margin-bottom: 20px; border-radius: 0 4px 4px 0; }
-          .text-rej-title { color: #374151; font-weight: bold; margin: 0; }
-          .text-rej-body { color: #4b5563; margin: 8px 0 0 0; }
-          .badge-rej { background:#e5e7eb; color:#374151; padding:2px 8px; border-radius:4px; font-size:0.85em; font-weight:normal; margin-left: auto; }
+          .abstract-content .en { margin-bottom: 12px; color: #374151; line-height: 1.6; }
+          .abstract-content .cn { color: #4b5563; margin-bottom: 20px; border-left: 3px solid #e5e7eb; padding-left: 12px; background: #f9fafb; padding-top:4px; padding-bottom:4px;}
+          .box-recommend { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin-bottom: 20px; }
+          .box-reject { background: #f3f4f6; border-left: 4px solid #9ca3af; padding: 12px 16px; margin-bottom: 20px; }
         </style>"]
 
     (if is-recommended
@@ -204,31 +185,28 @@
         <div class='rssbox-header'>
           <h2 style='margin-top:0;'>%s</h2>
           
-          <div class='rssbox-meta'>
-            <div class='meta-row'>
-               <span>📅 %s</span> <span style='color:#e5e7eb'>|</span>
-               <span>📰 <strong>%s</strong></span> <span style='color:#e5e7eb'>|</span>
-               <span>🏷️ %s</span>
-            </div>
-            <div class='meta-row' style='margin-top:4px; font-size:0.85em;'>
-               <span>✍️ %s</span> <span style='color:#e5e7eb'>|</span>
-               <span>🏛️ %s</span>
-            </div>
+          <!-- [修改] 使用 div 强制换行，去掉 | 分隔符 -->
+          <div style='margin-bottom: 20px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
+             <div>📅 <strong>发表日期：</strong> %s</div>
+             <div>📰 <strong>期刊来源：</strong> %s</div>
+             <div>🏷️ <strong>文章分类：</strong> %s</div>
+             <div>✍️ <strong>作者列表：</strong> %s</div>
+             <div>🏛️ <strong>所属机构：</strong> %s</div>
           </div>
         </div>
         
         <div class='box-recommend'>
-          <div style='display:flex; align-items:center;'>
-             <div class='text-rec-title'>🤖 AI 推荐 (%s)</div>
-             <span class='badge-rec'>%s%s · <strong>%s</strong></span>
+          <div style='margin-bottom: 8px;'>
+             <span style='color: #15803d; font-weight: bold;'>🤖 AI 推荐 (%s)</span>
+             <span style='float: right; color:#15803d; font-size: 0.85em;'>%s%s · <strong>%s</strong></span>
           </div>
-          <p class='text-rec-body'>%s</p>
-          <p class='text-rec-body' style='font-size:0.85em;'>🏷️ %s</p>
+          <p style='color: #14532d; margin: 0;'>%s</p>
+          <p style='color: #14532d; margin: 8px 0 0 0; font-size: 0.85em;'>🏷️ %s</p>
         </div>
 
         <div class='abstract-content'>%s</div> <!-- 双语内容 -->
 
-        <p style='margin-top: 30px;'><a href='%s' target='_blank' class='rssbox-btn'>阅读全文</a></p>
+        <p style='margin-top: 30px;'><a href='%s' target='_blank' style='display:inline-block; background:#2563eb; color:#fff; padding:8px 16px; border-radius:6px; text-decoration:none;'>阅读全文</a></p>
       </div>"
               common-css
               (:title paper)
@@ -237,7 +215,7 @@
               (or (:institution paper) "")
               tag
               (if (empty? score-display) "" (str score-display " · "))
-              cited-display perc-display ;; 指标
+              cited-display perc-display
               (:reason review) (str/join ", " (:tags review))
               (:immersive_html review)
               (:url paper))
@@ -248,30 +226,27 @@
         <div class='rssbox-header'>
           <h2 style='margin-top:0; color:#4b5563;'>%s</h2>
           
-          <div class='rssbox-meta'>
-            <div class='meta-row'>
-               <span>📅 %s</span> <span style='color:#e5e7eb'>|</span>
-               <span>📰 %s</span>
-            </div>
-            <div class='meta-row' style='margin-top:4px; font-size:0.85em;'>
-               <span>✍️ %s</span>
-            </div>
+          <!-- [修改] 拒稿样式的 Meta 也使用换行 -->
+          <div style='margin-bottom: 20px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
+             <div>📅 <strong>发表日期：</strong> %s</div>
+             <div>📰 <strong>期刊来源：</strong> %s</div>
+             <div>✍️ <strong>作者列表：</strong> %s</div>
           </div>
         </div>
 
         <div class='box-reject'>
-          <div style='display:flex; align-items:center;'>
-             <div class='text-rej-title'>🤖 AI 过滤 (Filtered)</div>
-             <span class='badge-rej'>%s%s</span>
+          <div style='margin-bottom: 8px;'>
+             <span style='color: #374151; font-weight: bold;'>🤖 AI 过滤</span>
+             <span style='float: right; color:#374151; font-size: 0.85em;'>%s%s</span>
           </div>
-          <p class='text-rej-body'><strong>理由：</strong>%s</p>
+          <p style='color: #4b5563; margin: 0;'>%s</p>
         </div>
 
         <div class='abstract-content'>
            <p class='en'>%s</p>
         </div>
 
-        <p style='margin-top: 30px;'><a href='%s' target='_blank' class='rssbox-btn' style='background-color:#6b7280;'>阅读全文</a></p>
+        <p style='margin-top: 30px;'><a href='%s' target='_blank' style='display:inline-block; background:#6b7280; color:#fff; padding:8px 16px; border-radius:6px; text-decoration:none;'>阅读全文</a></p>
       </div>"
               common-css
               (:title paper)
@@ -282,6 +257,7 @@
               (:reason review)
               (:abstract paper)
               (:url paper)))))
+
 
 
 ;; --- 4. 核心处理流程 ---
@@ -336,20 +312,20 @@
   (log/info ">>> OpenAlex Hybrid Cycle Start...")
   (try
     (let [today (java.time.LocalDate/now)
-          lookback-days (config/get-config :lookback-days 3)
+          lookback-days (config/get-config :lookback-days 30)
 
           ;; 策略 A: 过去 3 天，按时间排序 (抓最新)
           fresh-works (fetch-works search-query
                                    (.toString (.minusDays today lookback-days))
                                    "publication_date:desc"
-                                   15)
+                                   50)
 
           ;; 策略 B: 过去 3 年，按引用数排序 (抓经典/补漏)
-          ;; 每天补 10 篇经典，慢慢填满你的数据库
+          ;; 每天补 20 篇经典，慢慢填满你的数据库
           classic-works (fetch-works search-query
-                                     (.toString (.minusYears today 3))
+                                     (.toString (.minusYears today 5))
                                      "cited_by_count:desc"
-                                     10)
+                                     20)
 
           ;; 合并去重 (只保留 DB 里没有的)
           all-works (concat

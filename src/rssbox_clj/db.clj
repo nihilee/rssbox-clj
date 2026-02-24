@@ -38,11 +38,7 @@
                      url title content]))
 
 (defn get-recent-immune-articles [limit]
-  (jdbc/execute! ds ["SELECT url as id,
-                             url,
-                             title,
-                             content as content_html,
-                             strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) as date_published
+  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published
                       FROM immune_article_cache
                       WHERE title LIKE '⭐%' OR title LIKE '📄%'
                       ORDER BY updated_at DESC LIMIT ?" limit]
@@ -58,12 +54,7 @@
                      url title content]))
 
 (defn get-recent-articles [limit]
-  (jdbc/execute! ds ["SELECT url as id,
-                             url,
-                             title,
-                             content as content_html,
-                             -- 关键修复：转为 RFC 3339 格式
-                             strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) as date_published
+  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published
                       FROM article_cache
                       WHERE title LIKE '⭐%' OR title LIKE '📄%'
                       ORDER BY updated_at DESC LIMIT ?" limit]

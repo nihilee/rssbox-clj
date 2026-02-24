@@ -6,7 +6,6 @@
             [rssbox-clj.db :as db]
             [clojure.tools.logging :as log]
             [clojure.string :as str]
-            ;; [关键] 引入原有的 fetcher
             [rssbox-clj.fetcher :as fetcher]))
 
 ;; --- State ---
