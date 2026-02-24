@@ -281,3 +281,71 @@
       (catch Exception e
         (log/warn "Abstract reconstruction failed" (.getMessage e))
         nil))))
+
+;; ==> processor.clj <==
+;; 在文件末尾添加以下内容
+
+;; --- [新增] Immune 专属审稿人 Prompt ---
+(def immune-reviewer-sys-prompt
+  "你是一个专精于 **肿瘤免疫学 (Tumor Immunology) 和 免疫治疗 (Immunotherapy)** 的资深科研专家。
+   请根据提供的文章信息，判断其是否值得阅读。
+
+   [核心关注点]：
+   我们寻找的是 **肿瘤微环境 (TME)、免疫检查点、T细胞耗竭、CAR-T、mRNA疫苗** 相关的最新突破。
+
+   [推荐标准 - 满足以下任一条件即推荐]：
+   1. 发现了新的免疫治疗靶点或耐药机制。
+   2. 免疫细胞群体 (如单细胞测序) 的新发现。
+   3. 具有高临床转化价值的免疫治疗联合方案。
+
+   [拒稿标准]：
+   1. 纯传统的化疗/放疗研究 (不含免疫干预)。
+   2. 纯粹的卫生经济学、医保报销分析。
+   3. 单纯的个案报道 (Case Report)。
+
+   [输出要求]：
+   请返回 JSON 对象，包含 `paragraphs` 数组。不要返回 HTML 字符串。
+   [输出 JSON 格式]：
+   {
+     \"recommend\": boolean,
+     \"title_cn\": \"中文标题\",
+     \"reason\": \"推荐理由(或拒稿理由)\",
+     \"paragraphs\": [
+        {\"en\": \"...\", \"cn\": \"...\"}
+     ],
+     \"tags\": [\"Immunotherapy\", \"TME\", \"scRNA-seq\"]
+   }")
+
+;; --- [新增] Immune 专属的 Review 函数 ---
+(defn review-immune-abstract [{:keys [title abstract journal score institution topic authors percentile cited_by]}]
+  (try
+    (let [fmt-val   (fn [v] (if v (format "%.1f" (float v)) "N/A"))
+          fmt-int   (fn [v] (if v (str v) "N/A"))
+          fmt-perc  (fn [v] (if v (format "%.1f" (float v)) "N/A (New)"))
+
+          user-content (format
+                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[指标]：\n  - Score: %s\n  - Cited By: %s\n  - Percentile: %s\n摘要：%s"
+                        title (or authors "Unknown") (or institution "Unknown") (or topic "Unknown") journal
+                        (fmt-val score) (fmt-int cited_by) (fmt-perc percentile) abstract)
+
+          body {:model model
+                :messages [{:role "system" :content immune-reviewer-sys-prompt}
+                           {:role "user" :content user-content}]
+                :temperature 1.0
+                :response_format {:type "json_object"}}
+
+          resp (http/post api-url
+                          {:headers {"Authorization" (str "Bearer " api-key)
+                                     "Content-Type" "application/json"}
+                           :body (json/generate-string body)
+                           :socket-timeout 60000
+                           :conn-timeout 10000})
+          raw-content (-> (json/parse-string (:body resp) true) :choices first :message :content)
+          parsed-json (json/parse-string (clean-json-string raw-content) true)]
+
+      (if parsed-json
+        (assoc parsed-json :immersive_html (build-immersive-html (:paragraphs parsed-json)))
+        nil))
+    (catch Exception e
+      (log/error "Immune Review failed:" (.getMessage e))
+      nil)))

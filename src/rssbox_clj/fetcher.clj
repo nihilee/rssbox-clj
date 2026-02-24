@@ -235,7 +235,7 @@
               date-display source-display tag
               (or (:authors paper) "Unknown")
               (or (:institution paper) "")
-              "Strong" ;; 推荐等级
+              tag
               (if (empty? score-display) "" (str score-display " · "))
               cited-display perc-display ;; 指标
               (:reason review) (str/join ", " (:tags review))

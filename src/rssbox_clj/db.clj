@@ -10,7 +10,6 @@
 (def ds (jdbc/get-datasource db-spec))
 
 (defn init-db! []
-  ;; 显式开启 WAL 模式
   (jdbc/execute! ds ["PRAGMA journal_mode=WAL;"])
   (jdbc/execute! ds ["
     CREATE TABLE IF NOT EXISTS article_cache (
@@ -19,7 +18,36 @@
       content TEXT,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+  "])
+  ;; [新增] Immune 专属表
+  (jdbc/execute! ds ["
+    CREATE TABLE IF NOT EXISTS immune_article_cache (
+      url TEXT PRIMARY KEY,
+      title TEXT,
+      content TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
   "]))
+
+(defn get-immune-cache [url]
+  (jdbc/execute-one! ds ["SELECT content FROM immune_article_cache WHERE url = ?" url]
+                     {:builder-fn rs/as-unqualified-maps}))
+
+(defn save-immune-cache! [url title content]
+  (jdbc/execute! ds ["INSERT OR REPLACE INTO immune_article_cache (url, title, content, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)"
+                     url title content]))
+
+(defn get-recent-immune-articles [limit]
+  (jdbc/execute! ds ["SELECT url as id,
+                             url,
+                             title,
+                             content as content_html,
+                             strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) as date_published
+                      FROM immune_article_cache
+                      WHERE title LIKE '⭐%' OR title LIKE '📄%'
+                      ORDER BY updated_at DESC LIMIT ?" limit]
+                 {:builder-fn rs/as-unqualified-maps}))
+
 
 (defn get-cache [url]
   (jdbc/execute-one! ds ["SELECT content FROM article_cache WHERE url = ?" url]
@@ -29,18 +57,15 @@
   (jdbc/execute! ds ["INSERT OR REPLACE INTO article_cache (url, title, content, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)"
                      url title content]))
 
-;; 获取最近的推荐文章用于生成 RSS, 过滤掉 [SKIP] 的文章
-(defn get-recent-recommended-articles [limit]
-  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published 
-                      FROM article_cache 
-                      WHERE title LIKE '⭐%' 
-                      ORDER BY updated_at DESC LIMIT ?" limit]
-                 {:builder-fn rs/as-unqualified-maps}))
-
 (defn get-recent-articles [limit]
-  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published
+  (jdbc/execute! ds ["SELECT url as id,
+                             url,
+                             title,
+                             content as content_html,
+                             -- 关键修复：转为 RFC 3339 格式
+                             strftime('%Y-%m-%dT%H:%M:%SZ', updated_at) as date_published
                       FROM article_cache
-                      -- [修改] 关键：只查询带特定前缀的文章，从而排除博客
                       WHERE title LIKE '⭐%' OR title LIKE '📄%'
                       ORDER BY updated_at DESC LIMIT ?" limit]
                  {:builder-fn rs/as-unqualified-maps}))
+

@@ -4,6 +4,7 @@
             [ring.util.response :refer [response content-type status]]
             [rssbox-clj.aggregator :as agg]
             [rssbox-clj.fetcher :as fetcher]
+            [rssbox-clj.immune-fetcher :as immune-fetcher]
             [cheshire.core :as json]
             [cheshire.generate :as json-gen]))
 
@@ -30,7 +31,24 @@
 (defn handle-articles-feed []
   (let [data (fetcher/get-feed)]
     (if (empty? data)
-      (-> (response (json/generate-string {:title "AI Research Radar" :items []}))
+      ;; 修复：补全 JSON Feed 必要字段
+      (-> (response (json/generate-string
+                     {:version "https://jsonfeed.org/version/1.1"
+                      :title "AI Research Radar"
+                      :items []}))
+          (content-type "application/feed+json; charset=utf-8"))
+      (-> (response (json/generate-string data))
+          (content-type "application/feed+json; charset=utf-8")))))
+
+
+;; --- [新增] 处理 Immune Feed ---
+(defn handle-immune-articles-feed []
+  (let [data (immune-fetcher/get-feed)]
+    (if (empty? data)
+      (-> (response (json/generate-string
+                     {:version "https://jsonfeed.org/version/1.1"
+                      :title "Immune Research Radar"
+                      :items []}))
           (content-type "application/feed+json; charset=utf-8"))
       (-> (response (json/generate-string data))
           (content-type "application/feed+json; charset=utf-8")))))
@@ -38,5 +56,6 @@
 (defroutes app-routes
   (GET "/feed" [] (handle-feed))
   (GET "/articles" [] (handle-articles-feed))
+  (GET "/immune-articles" [] (handle-immune-articles-feed))
   (GET "/" [] {:status 200 :body "<h1>RSSBox Running (v2)</h1><p><a href='/feed'>/feed</a></p><p><a href='/articles'>/articles</a></p>"})
   (route/not-found "Not Found"))

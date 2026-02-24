@@ -5,6 +5,7 @@
             [rssbox-clj.processor :as proc]
             [rssbox-clj.aggregator :as agg]
             [rssbox-clj.fetcher :as fetcher]
+            [rssbox-clj.immune-fetcher :as immune-fetcher]
             [rssbox-clj.config :as config]
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :refer [wrap-params]])
@@ -20,8 +21,8 @@
 
   ;; 启动聚合调度器
   (agg/start-scheduler!)
-
   (fetcher/start-scheduler!)
+  (immune-fetcher/start-scheduler!)
 
   (let [port (Integer/parseInt (str (config/get-config :port 8000)))]
     (log/info "Server running on http://localhost:" port)
