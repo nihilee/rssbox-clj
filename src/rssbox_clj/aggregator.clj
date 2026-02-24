@@ -124,6 +124,9 @@
                :title "Hacker News Blogs (AI Translated)"
                :home_page_url (config/get-config :public-url "http://localhost:3000")
                :feed_url (str (config/get-config :public-url "http://localhost:3000") "/feed")
+
+               :icon "https://upload.wikimedia.org/wikipedia/commons/4/43/Feed-icon.svg"
+               :favicon "https://upload.wikimedia.org/wikipedia/commons/4/43/Feed-icon.svg"
                :items json-items})
 
       (log/info ">>> Feed updated. Top item date:"

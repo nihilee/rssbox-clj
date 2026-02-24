@@ -135,7 +135,6 @@
     (catch Exception e
       (log/error "Task Error" url (.getMessage e)))))
 
-
 ;; 5. Worker 管理
 (defn submit-task [url title]
   ;; 使用 go 块异步提交，防止阻塞主聚合线程
@@ -152,45 +151,91 @@
           (process-article-task task)
           (recur))))))
 
-;; --- 升级版审稿人 Prompt ---
+;; --- 审稿人 Prompt ---
 (def reviewer-sys-prompt
-  "你是一个生物信息学和肿瘤学领域的资深科研专家。
-   请根据提供的文章信息判断其是否值得阅读。
-   
-   你的任务：
-   判断是否推荐 (recommend)。
-   如果推荐，请将摘要完整翻译成中文 (abstract_cn)。
-   提取核心创新点 (reason)。
+  "你是一个专精于 **生物信息学 (Bioinformatics) 和 人工智能 (AI)** 在肿瘤学领域应用的资深科研专家。
+   请根据提供的文章信息，以 **“计算驱动 (Computation-Driven)”** 的视角判断其是否值得阅读。
 
-   输出 JSON 格式：
+   [核心关注点]：
+   我们寻找的是 **AI/算法** 与 **癌症早筛/MRD/液体活检** 的深度结合。
+
+   [推荐标准 - 满足以下任一条件即推荐]：
+   1. **AI/Bioinfo + 肿瘤应用 (最高优先级)**：
+      - 提出了新的算法、模型或统计方法，应用于早筛/MRD/ctDNA/多组学。
+   2. **底层技术创新 (中高优先级)**：
+      - 通用的 AI/Bioinfo 方法 (Transformer, GNN, Single-cell)，具有迁移潜力。
+   3. **高影响力兜底 (需谨慎)**：
+      - 引用次数 > 50 或 百分位 > 90.0 的文章。
+      - **重要例外**：必须通过下方的[拒稿标准]检查。如果属于“引用收割机”类型的文章，坚决拒稿。
+
+   [拒稿标准 - 遇到以下情况一律拒稿 (无论引用多高)]：
+   1. **纯统计年报**：仅报告发病率/死亡率/流行病学数据 (如 GLOBOCAN, Cancer Statistics)。
+   2. **临床指南/共识**：医生操作手册、专家共识、诊疗标准 (Guidelines, Consensus, Standards of Care)。
+   3. **卫生政策/经济学**：成本效益分析、医保政策、医疗负担研究 (Cost-effectiveness, Health policy)。
+   4. **纯湿实验机制**：不涉及组学数据分析的分子机制研究 (如某通路的纯生化实验)。
+   5. **纯临床药物试验**：简单的 I/II/III 期药物临床试验结果 (除非重点在于伴随诊断的 Biomarker 分析)。
+   6. **过时热点**：如 'COVID-19 对癌症筛查的影响' 这类纯社会学统计。
+
+   [输出要求]：
+   请返回 JSON 对象，包含 `paragraphs` 数组。
+   **不要返回 HTML 字符串**。
+
+   [输出 JSON 格式]：
    {
      \"recommend\": boolean,
      \"title_cn\": \"中文标题\",
-     \"reason\": \"一句话推荐理由 (例如：引用百分位高达95，DeepMind最新发布的基因组模型)\",
-     \"abstract_cn\": \"完整的中文摘要翻译，保持学术严谨性\",
-     \"tags\": [\"关键词1\", \"关键词2\"]
-   }
-   
-   如果 recommend 为 false，其他字段可以为空字符串。
-   ")
+     \"reason\": \"推荐理由(或拒稿理由)\",
+     \"paragraphs\": [
+        {\"en\": \"...\", \"cn\": \"...\"}
+     ],
+     \"tags\": [\"AI/ML\", \"Bioinfo\", \"MRD\"]
+   }")
 
-(defn review-abstract [{:keys [title abstract journal score institution topic authors percentile]}]
+
+;; [新增] 辅助函数：将结构化段落转为 HTML
+(defn build-immersive-html [paragraphs]
+  (if (empty? paragraphs)
+    ""
+    (str "<div class='abstract-content'>"
+         (str/join
+          (map (fn [p]
+                 (format "<p class='en'>%s</p><p class='cn'>%s</p>"
+                         (:en p) (:cn p)))
+               paragraphs))
+         "</div>")))
+
+;; [新增] 辅助函数：清洗 JSON 字符串 (去除 Markdown 代码块标记)
+(defn clean-json-string [s]
+  (-> s
+      (str/replace #"^```json" "")
+      (str/replace #"^```" "")
+      (str/replace #"```$" "")
+      (str/trim)))
+
+(defn review-abstract [{:keys [title abstract journal score institution topic authors percentile cited_by]}]
   (try
-    (let [user-content (format
-                        "标题：%s\n作者：%s\n机构：%s\n领域主题 (Topic)：%s\n期刊/来源：%s (2yr Score: %.1f)\n引用百分位 (Percentile)：%.1f (满分100)\n摘要：%s"
+    (let [;; 辅助格式化函数
+          fmt-val   (fn [v] (if v (format "%.1f" (float v)) "N/A"))
+          fmt-int   (fn [v] (if v (str v) "N/A"))
+          fmt-perc  (fn [v] (if v (format "%.1f" (float v)) "N/A (New Article)"))
+
+          user-content (format
+                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[关键影响力指标]：\n  - 期刊评分 (Score): %s\n  - 文章被引次数 (Cited By): %s\n  - 引用百分位 (Percentile): %s\n摘要：%s"
                         title
                         (or authors "Unknown")
                         (or institution "Unknown")
                         (or topic "Unknown")
                         journal
-                        (float (or score 0.0))
-                        (float (or percentile 0.0))
+                        (fmt-val score)        ;; N/A 或 30.5
+                        (fmt-int cited_by)     ;; N/A 或 1639
+                        (fmt-perc percentile)  ;; N/A (New Article) 或 99.9
                         abstract)
 
           body {:model model
                 :messages [{:role "system" :content reviewer-sys-prompt}
                            {:role "user" :content user-content}]
-                :temperature 1.0 ;; 降低温度，减少幻觉
+                :temperature 1.0
+                ;; 启用 JSON Mode
                 :response_format {:type "json_object"}}
 
           resp (http/post api-url
@@ -200,13 +245,22 @@
                            :socket-timeout 60000
                            :conn-timeout 10000})
 
-          raw-content (-> (json/parse-string (:body resp) true) :choices first :message :content)]
+          raw-content (-> (json/parse-string (:body resp) true) :choices first :message :content)
 
-      (json/parse-string raw-content true))
+          ;; [关键] 清洗 + 解析
+          parsed-json (json/parse-string (clean-json-string raw-content) true)]
+
+      (if parsed-json
+        ;; [关键] 手动构建 HTML，不再依赖 AI 生成的 HTML 字符串
+        (assoc parsed-json :immersive_html (build-immersive-html (:paragraphs parsed-json)))
+        (do
+          (log/error "Review JSON parsed as nil. Raw:" raw-content)
+          nil)))
 
     (catch Exception e
       (log/error "Review failed:" (.getMessage e))
       nil)))
+
 
 ;; [新增] 还原 OpenAlex 的倒排索引摘要
 (defn reconstruct-abstract [inverted-index]

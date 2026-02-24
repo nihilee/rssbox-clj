@@ -35,4 +35,12 @@
                       FROM article_cache 
                       WHERE title LIKE '⭐%' 
                       ORDER BY updated_at DESC LIMIT ?" limit]
-                     {:builder-fn rs/as-unqualified-maps}))
+                 {:builder-fn rs/as-unqualified-maps}))
+
+(defn get-recent-articles [limit]
+  (jdbc/execute! ds ["SELECT url as id, url, title, content as content_html, updated_at as date_published
+                      FROM article_cache
+                      -- [修改] 关键：只查询带特定前缀的文章，从而排除博客
+                      WHERE title LIKE '⭐%' OR title LIKE '📄%'
+                      ORDER BY updated_at DESC LIMIT ?" limit]
+                 {:builder-fn rs/as-unqualified-maps}))
