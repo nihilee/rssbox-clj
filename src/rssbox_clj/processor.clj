@@ -155,18 +155,18 @@
 ;; --- 升级版审稿人 Prompt ---
 (def reviewer-sys-prompt
   "你是一个生物信息学和肿瘤学领域的资深科研专家。
-   请根据[文章摘要]和[期刊指标]判断这篇文献是否值得阅读。
+   请根据提供的文章信息判断其是否值得阅读。
    
    你的任务：
-   1. 判断是否推荐 (recommend)。
-   2. 如果推荐，请将摘要完整翻译成中文 (abstract_cn)。
-   3. 提取核心创新点 (reason)。
+   判断是否推荐 (recommend)。
+   如果推荐，请将摘要完整翻译成中文 (abstract_cn)。
+   提取核心创新点 (reason)。
 
-   输出必须是严格的 JSON 格式：
+   输出 JSON 格式：
    {
-     \"recommend\": boolean, 
+     \"recommend\": boolean,
      \"title_cn\": \"中文标题\",
-     \"reason\": \"一句话推荐理由，突出创新点\",
+     \"reason\": \"一句话推荐理由 (例如：引用百分位高达95，DeepMind最新发布的基因组模型)\",
      \"abstract_cn\": \"完整的中文摘要翻译，保持学术严谨性\",
      \"tags\": [\"关键词1\", \"关键词2\"]
    }
@@ -174,20 +174,23 @@
    如果 recommend 为 false，其他字段可以为空字符串。
    ")
 
-(defn review-abstract [{:keys [title abstract journal score institution]}]
+(defn review-abstract [{:keys [title abstract journal score institution topic authors percentile]}]
   (try
     (let [user-content (format
-                        "标题：%s\n期刊：%s (2yr Citedness: %s)\n机构：%s\n摘要：%s"
-                        title 
-                        journal 
-                        (or score "Unknown") 
-                        (or institution "Unknown") 
+                        "标题：%s\n作者：%s\n机构：%s\n领域主题 (Topic)：%s\n期刊/来源：%s (2yr Score: %.1f)\n引用百分位 (Percentile)：%.1f (满分100)\n摘要：%s"
+                        title
+                        (or authors "Unknown")
+                        (or institution "Unknown")
+                        (or topic "Unknown")
+                        journal
+                        (float (or score 0.0))
+                        (float (or percentile 0.0))
                         abstract)
-          
+
           body {:model model
                 :messages [{:role "system" :content reviewer-sys-prompt}
                            {:role "user" :content user-content}]
-                :temperature 0.2 ;; 降低温度，减少幻觉
+                :temperature 1.0 ;; 降低温度，减少幻觉
                 :response_format {:type "json_object"}}
 
           resp (http/post api-url
@@ -204,3 +207,23 @@
     (catch Exception e
       (log/error "Review failed:" (.getMessage e))
       nil)))
+
+;; [新增] 还原 OpenAlex 的倒排索引摘要
+(defn reconstruct-abstract [inverted-index]
+  (if (or (nil? inverted-index) (empty? inverted-index))
+    nil
+    (try
+      ;; inverted-index 结构: {"The": [0, 5], "study": [1]}
+      ;; 目标: "The study ... The ..."
+      (let [;; 1. 展平: ([0 "The"] [5 "The"] [1 "study"])
+            flat (mapcat (fn [[word positions]]
+                           (map (fn [pos] [pos word]) positions))
+                         inverted-index)
+            ;; 2. 排序: ([0 "The"] [1 "study"] [5 "The"])
+            sorted (sort-by first flat)
+            ;; 3. 提取单词
+            words (map second sorted)]
+        (str/join " " words))
+      (catch Exception e
+        (log/warn "Abstract reconstruction failed" (.getMessage e))
+        nil))))
