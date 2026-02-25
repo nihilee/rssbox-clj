@@ -13,34 +13,18 @@
 ;; --- Config ---
 (def default-query
   (str/join " OR "
-            [;; --- 第一组：领域词 AND 技术词 (这是最核心的过滤逻辑) ---
-             ;; 逻辑：(液体活检/MRD/ctDNA/早筛) AND (AI/机器学习/生物信息/深度学习)
-             ;; 注意：OpenAlex 支持括号嵌套，这样写可以捕获所有组合，比如 "ctDNA" + "Deep Learning"
-             (str "("
-                  "\"Minimal Residual Disease\" OR "
-                  "\"Measurable Residual Disease\" OR "
-                  "\"ctDNA\" OR "
-                  "\"circulating tumor DNA\" OR "
-                  "\"Liquid Biopsy\" OR "
-                  "\"Early Detection of Cancer\" OR "
-                  "\"Cancer Screening\""
-                  ") AND ("
-                  "\"Artificial Intelligence\" OR "
-                  "\"Machine Learning\" OR "
-                  "\"Deep Learning\" OR "
-                  "\"Bioinformatics\" OR "
-                  "\"Computational Biology\" OR "
-                  "\"Multi-omics\" OR "
-                  "\"Transformer\" OR "
-                  "\"Large Language Model\""
-                  ")")
+            [;; --- 第一组：癌症场景 + 计算方法 (经典组合) ---
+             "((\"Minimal Residual Disease\" OR \"ctDNA\" OR \"circulating tumor DNA\" OR \"Liquid Biopsy\" OR \"Early Detection of Cancer\" OR \"Cancer Screening\") AND (\"Artificial Intelligence\" OR \"Machine Learning\" OR \"Deep Learning\" OR \"Computational\"))"
 
-             ;; --- 第二组：本身就具有强计算属性的专有名词 (直接放行) ---
-             "\"Fragmentomics\""                ; 碎片组学 (cfDNA片段模式分析，纯计算驱动)
-             "\"Multi-cancer early detection\"" ; MCED (通常依赖复杂分类器)
-             "\"cfDNA methylation\""            ; 甲基化数据分析通常离不开Bioinfo
-             "\"Methylation deconvolution\""    ; 甲基化反卷积 (纯算法)
-             ]))
+             ;; --- 第二组：单细胞/空间转录组 + 算法框架 (呼应Prompt中"无需局限癌种"的前沿算法) ---
+             "((\"scRNA-seq\" OR \"single-cell\" OR \"spatial transcriptomics\" OR \"spatial omics\") AND (\"deep learning framework\" OR \"computational pipeline\" OR \"Foundation Model\" OR \"Large Language Model\" OR \"algorithm\"))"
+
+             ;; --- 第三组：明确声明自己是新工具/底层创新的黑话 ---
+             "\"novel bioinformatics tool\""
+             "\"new computational framework\""
+             "\"Fragmentomics\""
+             "\"Multi-cancer early detection\""
+             "\"Methylation deconvolution\""]))
 
 (def search-query (config/get-config :openalex-query default-query))
 (def min-impact-score (config/get-config :min-impact-score 3.0))
@@ -110,7 +94,7 @@
           doi (:doi work)
           title (:title work)
 
-          ;; [修改] 先重构，再清洗
+          ;; 先重构，再清洗
           raw-abstract (proc/reconstruct-abstract (:abstract_inverted_index work))
           abstract (clean-abstract-text raw-abstract)
 
@@ -129,7 +113,16 @@
                         (str/join ", " author-names))
 
           cited-by (:cited_by_count work)
-          percentile (get-in work [:citation_normalized_percentile :value])
+
+          ;; ==========================================
+          ;; [修复点] 将 OpenAlex 的小数比例 (0~1) 转换为百分比 (0~100)
+          ;; 防止 0.9875 被 (format "%.1f") 四舍五入变成 1.0
+          ;; ==========================================
+          raw-percentile (get-in work [:citation_normalized_percentile :value])
+          percentile (when raw-percentile
+                       (if (<= raw-percentile 1.0)
+                         (* raw-percentile 100.0)
+                         raw-percentile))
 
           inst (try (-> work :authorships first :institutions first :display_name)
                     (catch Exception _ "Unknown Inst"))
@@ -160,14 +153,12 @@
         source-display (if (= "preprint" (:type paper)) "Preprint" journal-display)
         date-display (if (:date paper) (:date paper) "")
 
-        ;; 指标显示逻辑
-        score-display (if (:score paper) (format "IF: %.1f" (:score paper)) "")
-        cited-display (if (:cited_by paper) (str "Cited: " (:cited_by paper)) "-")
-        perc-display (if (:percentile paper)
-                       (format "Top %.1f%%" (- 100.0 (:percentile paper)))
-                       "New")
+        ;; [修改点] 将界面展示的标签改得更严谨，直接体现 OpenAlex 的概念
+        score-display (if (:score paper) (format "2yr Citedness: %.1f" (:score paper)) "")
+        cited-display (if (:cited_by paper) (str "Cited by: " (:cited_by paper)) "-")
+        perc-display (if (:percentile paper) (format "Top %.1f%%" (- 100.0 (:percentile paper))) "New")
 
-        ;; 公共 CSS (主要针对支持样式的阅读器和浏览器，保留基础美化)
+        ;; 公共 CSS
         common-css "
         <style>
           .rssbox-card { font-family: -apple-system, sans-serif; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; max-width: 800px; background: #fff; }
@@ -176,35 +167,39 @@
           .abstract-content .cn { color: #4b5563; margin-bottom: 20px; border-left: 3px solid #e5e7eb; padding-left: 12px; background: #f9fafb; padding-top:4px; padding-bottom:4px;}
           .box-recommend { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin-bottom: 20px; }
           .box-reject { background: #f3f4f6; border-left: 4px solid #9ca3af; padding: 12px 16px; margin-bottom: 20px; }
+          .metric-badge { display: inline-block; background: #e5e7eb; color: #374151; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; margin-right: 8px; margin-bottom: 8px;}
         </style>"]
 
     (if is-recommended
-      ;; --- A. 推荐样式 ---
+      ;; ==========================================
+      ;; --- A. 推荐样式 (绿色系) ---
+      ;; ==========================================
       (format "%s
       <div class='rssbox-card'>
         <div class='rssbox-header'>
           <h2 style='margin-top:0;'>%s</h2>
-          
-          <!-- [修改] 使用 div 强制换行，去掉 | 分隔符 -->
-          <div style='margin-bottom: 20px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
+          <div style='margin-bottom: 15px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
              <div>📅 <strong>发表日期：</strong> %s</div>
              <div>📰 <strong>期刊来源：</strong> %s</div>
              <div>🏷️ <strong>文章分类：</strong> %s</div>
              <div>✍️ <strong>作者列表：</strong> %s</div>
              <div>🏛️ <strong>所属机构：</strong> %s</div>
           </div>
+          <div style='margin-bottom: 20px;'>
+             <!-- [修改点] 将指标变成小 Badge，更加醒目专业 -->
+             %s %s %s
+          </div>
         </div>
-        
+
         <div class='box-recommend'>
           <div style='margin-bottom: 8px;'>
-             <span style='color: #15803d; font-weight: bold;'>🤖 AI 推荐 (%s)</span>
-             <span style='float: right; color:#15803d; font-size: 0.85em;'>%s%s · <strong>%s</strong></span>
+             <span style='float: right; color:#15803d; font-size: 0.85em;'>🤖 AI Review</span>
           </div>
           <p style='color: #14532d; margin: 0;'>%s</p>
           <p style='color: #14532d; margin: 8px 0 0 0; font-size: 0.85em;'>🏷️ %s</p>
         </div>
 
-        <div class='abstract-content'>%s</div> <!-- 双语内容 -->
+        <div class='abstract-content'>%s</div>
 
         <p style='margin-top: 30px;'><a href='%s' target='_blank' style='display:inline-block; background:#2563eb; color:#fff; padding:8px 16px; border-radius:6px; text-decoration:none;'>阅读全文</a></p>
       </div>"
@@ -213,51 +208,55 @@
               date-display source-display tag
               (or (:authors paper) "Unknown")
               (or (:institution paper) "")
-              tag
-              (if (empty? score-display) "" (str score-display " · "))
-              cited-display perc-display
+              (if (empty? score-display) "" (str "<span class='metric-badge'>📊 " score-display "</span>"))
+              (if (empty? cited-display) "" (str "<span class='metric-badge'>🔥 " cited-display "</span>"))
+              (if (empty? perc-display) "" (str "<span class='metric-badge'>📈 " perc-display "</span>"))
               (:reason review) (str/join ", " (:tags review))
               (:immersive_html review)
               (:url paper))
 
-      ;; --- B. 拒稿样式 ---
+      ;; ==========================================
+      ;; --- B. 拒稿样式 (灰色系) ---
+      ;; ==========================================
       (format "%s
       <div class='rssbox-card'>
         <div class='rssbox-header'>
           <h2 style='margin-top:0; color:#4b5563;'>%s</h2>
-          
-          <!-- [修改] 拒稿样式的 Meta 也使用换行 -->
-          <div style='margin-bottom: 20px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
+          <div style='margin-bottom: 15px; color: #6b7280; font-size: 0.95em; line-height: 1.8;'>
              <div>📅 <strong>发表日期：</strong> %s</div>
              <div>📰 <strong>期刊来源：</strong> %s</div>
+             <div>🏷️ <strong>文章分类：</strong> %s</div>
              <div>✍️ <strong>作者列表：</strong> %s</div>
+             <div>🏛️ <strong>所属机构：</strong> %s</div>
+          </div>
+          <div style='margin-bottom: 20px;'>
+             %s %s %s
           </div>
         </div>
 
         <div class='box-reject'>
           <div style='margin-bottom: 8px;'>
-             <span style='color: #374151; font-weight: bold;'>🤖 AI 过滤</span>
-             <span style='float: right; color:#374151; font-size: 0.85em;'>%s%s</span>
+             <span style='float: right; color:#374151; font-size: 0.85em;'>🤖 AI Review</span>
           </div>
           <p style='color: #4b5563; margin: 0;'>%s</p>
+          <p style='color: #4b5563; margin: 8px 0 0 0; font-size: 0.85em;'>🏷️ %s</p>
         </div>
 
-        <div class='abstract-content'>
-           <p class='en'>%s</p>
-        </div>
+        <div class='abstract-content'>%s</div>
 
         <p style='margin-top: 30px;'><a href='%s' target='_blank' style='display:inline-block; background:#6b7280; color:#fff; padding:8px 16px; border-radius:6px; text-decoration:none;'>阅读全文</a></p>
       </div>"
               common-css
               (:title paper)
-              date-display source-display
+              date-display source-display tag
               (or (:authors paper) "Unknown")
-              (if (empty? score-display) "" (str score-display " · "))
-              cited-display
-              (:reason review)
-              (:abstract paper)
+              (or (:institution paper) "")
+              (if (empty? score-display) "" (str "<span class='metric-badge'>📊 " score-display "</span>"))
+              (if (empty? cited-display) "" (str "<span class='metric-badge'>🔥 " cited-display "</span>"))
+              (if (empty? perc-display) "" (str "<span class='metric-badge'>📈 " perc-display "</span>"))
+              (:reason review) (str/join ", " (:tags review))
+              (:immersive_html review)
               (:url paper)))))
-
 
 
 ;; --- 4. 核心处理流程 ---
@@ -289,10 +288,14 @@
                                               :institution (:institution paper)
                                               :topic (:topic paper)
                                               :authors (:authors paper)
-                                              ;; [关键] 确保传入
                                               :percentile (:percentile paper)
                                               :cited_by (:cited_by paper)})]
-            (if (and review (:recommend review))
+            ;; [修复点] 严格区分 API 失败 (nil) 和 明确拒稿 (false)
+            (cond
+              (nil? review)
+              (log/warn "[API SKIP] Review failed or timeout, will retry next cycle:" (:id paper))
+
+              (:recommend review)
               ;; --- Case A: 推荐 ---
               (let [html (generate-html review paper (if (= tag "Fresh") "New" "Classic") true)
                     cn-title (str "⭐ " (:title_cn review))]
@@ -300,32 +303,46 @@
                 (log/info "[RECOMMEND] " (:id paper))
                 true)
 
-              ;; --- Case B: 拒稿 ---
-              (do
-                (let [html (generate-html review paper tag false)
-                      plain-title (str "📄 " (:title paper))]
-                  (db/save-cache! db-url plain-title html)
-                  (log/info "[AI FILTER] Saved:" (:id paper) "| Reason:" (:reason review)))
+              :else
+              ;; --- Case B: 明确拒稿 ---
+              (let [html (generate-html review paper tag false)
+                    plain-title (str "📄 " (or (:title_cn review) (:title paper)))]
+                (db/save-cache! db-url plain-title html)
+                (log/info "[AI FILTER] Saved:" (:id paper) "| Reason:" (:reason review))
                 true))))))))
 
 (defn update-feed []
   (log/info ">>> OpenAlex Hybrid Cycle Start...")
   (try
     (let [today (java.time.LocalDate/now)
-          lookback-days (config/get-config :lookback-days 30)
+          lookback-days (config/get-config :lookback-days 3)
 
           ;; 策略 A: 过去 3 天，按时间排序 (抓最新)
           fresh-works (fetch-works search-query
                                    (.toString (.minusDays today lookback-days))
                                    "publication_date:desc"
-                                   50)
+                                   15)
 
-          ;; 策略 B: 过去 3 年，按引用数排序 (抓经典/补漏)
-          ;; 每天补 20 篇经典，慢慢填满你的数据库
-          classic-works (fetch-works search-query
-                                     (.toString (.minusYears today 5))
-                                     "cited_by_count:desc"
-                                     20)
+          ;; 策略 B: 过去 3 年经典文章盲盒 (随机补漏)
+          ;; 每天随机抽取 20 篇引用量 > 50 的经典文章，慢慢丰富数据库
+          classic-works (try
+                          (let [url "https://api.openalex.org/works"
+                                resp (http/get url
+                                               {:query-params {:search search-query
+                                                               :filter (str "from_publication_date:" (.toString (.minusYears today 3))
+                                                                            ",cited_by_count:>50") ;; 必须是高引用
+                                                               :sample 20 ;; [核心魔法] OpenAlex 会从符合条件的文章池里随机抽 10 篇
+                                                               :select openalex-fields
+                                                               :mailto (config/get-config :ncbi-email)}
+                                                :as :json
+                                                :socket-timeout 20000
+                                                :conn-timeout 5000})]
+                            (log/info "Fetched 20 classic random samples.")
+                            (get-in (:body resp) [:results]))
+                          (catch Exception e
+                            (log/warn "Classic fetch failed:" (.getMessage e))
+                            []))
+
 
           ;; 合并去重 (只保留 DB 里没有的)
           all-works (concat
@@ -337,7 +354,8 @@
       (if (empty? new-works)
         (log/info "No new papers to process.")
         (doseq [work new-works]
-          (process-work work (:tag work))))
+          (process-work work (:tag work))
+          (Thread/sleep 2500)))
 
       ;; 更新 Feed
       (let [recent-items (db/get-recent-articles 50)]

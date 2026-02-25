@@ -103,7 +103,8 @@
 (defn process-article-task [{:keys [url title]}]
   (log/info "Processing:" title)
   (try
-    (let [resp (http/get url {:headers {"User-Agent" config/user-agent}
+    (let [url (str/trim url)
+          resp (http/get url {:headers {"User-Agent" config/user-agent}
                               :socket-timeout 10000
                               :as :string}) ;; 强制解析为字符串
           reader (Readability4J. url (:body resp))
@@ -168,17 +169,16 @@
    [✅ 推荐标准 - 满足以下任一条件且通过质量审核]：
    1. **纯方法学/工具创新**：发布了新的生信分析工具、算法模型、数据库，具有广泛的应用潜力。
    2. **AI/Bioinfo + 肿瘤应用**：利用复杂的计算方法（不仅是常规统计）在早筛/MRD/ctDNA/空间组学中取得突破。
-   3. **高影响力兜底**：引用次数 > 50 或 百分位 > 90.0，且不违反拒稿标准。
+   3. **高影响力兜底**：参考 OpenAlex cited_by_count 和 citation_normalized_percentile，且不违反强拒稿标准。
 
    [❌ 拒稿标准 - 遇到以下情况拒稿]：
-   1. **生信套路灌水 (最重要)**：纯粹基于 TCGA/GEO 等公开数据库，跑常规流程 (如 WGCNA, 差异表达, LASSO/Cox) 构建普通的“预后基因签名 (Prognostic Signature/Model)”，无底层算法创新的文章。
-   2. **纯统计/综述**：常规的流行病学发病率统计；缺乏独到见解泛泛而谈的 Review。
-   3. **纯临床/湿实验**：纯粹的药物临床试验报告；不涉及复杂计算分析的纯分子机制/生化实验。
-   4. **临床指南/经济学**：医生操作手册、共识、医保报销、成本效益分析。
+   1. **生信套路灌水 (最重要)**：纯粹基于 TCGA/GEO 等公开数据库，跑常规流程构建普通的预后模型 (Prognostic Signature)，无底层算法创新的文章。
+   2. **纯统计/综述**：常规的流行病学发病率统计；泛泛而谈，cited_by_count 很低的 Review。
+   3. **纯临床/湿实验**：纯粹的药物临床试验报告；不涉及复杂计算分析的纯生化实验。
 
    [输出要求]：
    请返回 JSON 对象，包含 `paragraphs` 数组。不要返回 HTML 字符串。
-   如果你决定推荐，请在 reason 中简述其在方法学或数据上的亮点（如：发现了新工具、机构实力强、验证队列扎实）。
+   如果你决定推荐，请在 reason 中简述其在方法学或数据上的亮点。
 
    [输出 JSON 格式]：
    {
@@ -190,8 +190,6 @@
      ],
      \"tags\": [\"AI/ML\", \"Bioinfo tool\", \"MRD\"]
    }")
-
-
 
 ;; [新增] 辅助函数：将结构化段落转为 HTML
 (defn build-immersive-html [paragraphs]
@@ -215,28 +213,27 @@
 
 (defn review-abstract [{:keys [title abstract journal score institution topic authors percentile cited_by]}]
   (try
-    (let [;; 辅助格式化函数
-          fmt-val   (fn [v] (if v (format "%.1f" (float v)) "N/A"))
+    (let [fmt-val   (fn [v] (if v (format "%.1f" (float v)) "N/A"))
           fmt-int   (fn [v] (if v (str v) "N/A"))
           fmt-perc  (fn [v] (if v (format "%.1f" (float v)) "N/A (New Article)"))
 
+          ;; [关键修改] 直接使用 OpenAlex 字段名称
           user-content (format
-                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[关键影响力指标]：\n  - 期刊评分 (Score): %s\n  - 文章被引次数 (Cited By): %s\n  - 引用百分位 (Percentile): %s\n摘要：%s"
+                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[OpenAlex Metrics]：\n  - 2yr_mean_citedness: %s\n  - cited_by_count: %s\n  - citation_normalized_percentile: %s\n摘要：%s"
                         title
                         (or authors "Unknown")
                         (or institution "Unknown")
                         (or topic "Unknown")
                         journal
-                        (fmt-val score)        ;; N/A 或 30.5
-                        (fmt-int cited_by)     ;; N/A 或 1639
-                        (fmt-perc percentile)  ;; N/A (New Article) 或 99.9
+                        (fmt-val score)        ;; 对应 2yr_mean_citedness
+                        (fmt-int cited_by)     ;; 对应 cited_by_count
+                        (fmt-perc percentile)  ;; 对应 citation_normalized_percentile
                         abstract)
 
           body {:model model
                 :messages [{:role "system" :content reviewer-sys-prompt}
                            {:role "user" :content user-content}]
                 :temperature 1.0
-                ;; 启用 JSON Mode
                 :response_format {:type "json_object"}}
 
           resp (http/post api-url
@@ -247,12 +244,9 @@
                            :conn-timeout 10000})
 
           raw-content (-> (json/parse-string (:body resp) true) :choices first :message :content)
-
-          ;; [关键] 清洗 + 解析
           parsed-json (json/parse-string (clean-json-string raw-content) true)]
 
       (if parsed-json
-        ;; [关键] 手动构建 HTML，不再依赖 AI 生成的 HTML 字符串
         (assoc parsed-json :immersive_html (build-immersive-html (:paragraphs parsed-json)))
         (do
           (log/error "Review JSON parsed as nil. Raw:" raw-content)
@@ -286,26 +280,28 @@
 ;; ==> processor.clj <==
 ;; 在文件末尾添加以下内容
 
-;; --- [新增] Immune 专属审稿人 Prompt ---
+;; --- [修改] Immune 专属审稿人 Prompt ---
 (def immune-reviewer-sys-prompt
   "你是一个专精于 **肿瘤免疫学 (Tumor Immunology) 和 免疫治疗 (Immunotherapy)** 的资深科研专家。
    请根据提供的文章信息，判断其是否值得阅读。
 
    [核心关注点]：
-   我们寻找的是 **肿瘤微环境 (TME)、免疫检查点、T细胞耗竭、CAR-T、mRNA疫苗** 相关的最新突破。
+   我们寻找的是 **肿瘤微环境 (TME)、免疫检查点、单细胞多组学、CAR-T、mRNA疫苗** 相关的最新底层突破或高质量临床分析。
 
-   [推荐标准 - 满足以下任一条件即推荐]：
+   [✅ 推荐标准 - 满足以下任一条件即推荐]：
    1. 发现了新的免疫治疗靶点或耐药机制。
-   2. 免疫细胞群体 (如单细胞测序) 的新发现。
-   3. 具有高临床转化价值的免疫治疗联合方案。
+   2. 基于单细胞测序 (scRNA-seq) 或空间转录组的免疫细胞群体新发现。
+   3. 具有高临床转化价值的创新免疫治疗方案 (如新型 CAR-T/NK 结构设计)。
+   4. 高影响力兜底：cited_by_count > 50 或 citation_normalized_percentile > 90.0。
 
-   [拒稿标准]：
+   [❌ 拒稿标准]：
    1. 纯传统的化疗/放疗研究 (不含免疫干预)。
    2. 纯粹的卫生经济学、医保报销分析。
    3. 单纯的个案报道 (Case Report)。
+   4. 基于公共数据库跑常规差异表达/预后模型的纯生信水文。
 
    [输出要求]：
-   请返回 JSON 对象，包含 `paragraphs` 数组。不要返回 HTML 字符串。
+   请返回 JSON 对象，包含 `paragraphs` 数组。
    [输出 JSON 格式]：
    {
      \"recommend\": boolean,
@@ -317,7 +313,7 @@
      \"tags\": [\"Immunotherapy\", \"TME\", \"scRNA-seq\"]
    }")
 
-;; --- [新增] Immune 专属的 Review 函数 ---
+;; --- [修改] Immune 专属的 Review 函数 (对齐字段) ---
 (defn review-immune-abstract [{:keys [title abstract journal score institution topic authors percentile cited_by]}]
   (try
     (let [fmt-val   (fn [v] (if v (format "%.1f" (float v)) "N/A"))
@@ -325,7 +321,7 @@
           fmt-perc  (fn [v] (if v (format "%.1f" (float v)) "N/A (New)"))
 
           user-content (format
-                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[指标]：\n  - Score: %s\n  - Cited By: %s\n  - Percentile: %s\n摘要：%s"
+                        "标题：%s\n作者：%s\n机构：%s\n领域主题：%s\n期刊/来源：%s\n[OpenAlex Metrics]：\n  - 2yr_mean_citedness: %s\n  - cited_by_count: %s\n  - citation_normalized_percentile: %s\n摘要：%s"
                         title (or authors "Unknown") (or institution "Unknown") (or topic "Unknown") journal
                         (fmt-val score) (fmt-int cited_by) (fmt-perc percentile) abstract)
 

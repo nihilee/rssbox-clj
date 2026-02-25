@@ -14,11 +14,15 @@
 ;; --- Config (独立的 Query) ---
 (def default-immune-query
   (str/join " OR "
-            ["\"Tumor Microenvironment\""
-             "\"Immune Checkpoint Inhibitor\""
-             "\"CAR-T\""
-             "\"T cell exhaustion\""
-             "\"Cancer Immunotherapy\""]))
+            [;; --- 第一组：免疫核心机制结合单细胞/空间/测序技术 ---
+             "((\"Tumor Microenvironment\" OR \"Immune Checkpoint\" OR \"T cell exhaustion\" OR \"Cancer Immunotherapy\") AND (\"scRNA-seq\" OR \"single-cell\" OR \"spatial\" OR \"multi-omics\" OR \"mechanism\" OR \"resistance\"))"
+
+             ;; --- 第二组：前沿高精尖疗法 (直接搜自带光环的词) ---
+             "\"CAR-T cell therapy\""
+             "\"CAR-NK\""
+             "\"mRNA cancer vaccine\""
+             "\"neoantigen vaccine\""
+             "\"tumor-infiltrating lymphocytes\""]))
 
 (def search-query (config/get-config :immune-openalex-query default-immune-query))
 
