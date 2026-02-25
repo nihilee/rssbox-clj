@@ -1,110 +1,141 @@
 # RSSBox-CLJ
 
-**AI 驱动的 RSS 全文聚合与沉浸式翻译服务**
+## AI-Powered RSS Proxy
 
-RSSBox-CLJ 是一个基于 Clojure 构建的高性能 RSS 代理服务。它不仅能聚合多个 RSS 源，更具备**全文提取**与**智能翻译**的核心能力。它能将仅包含摘要的 RSS Feed 转化为包含完整正文的沉浸式双语 Feed，彻底升级你的阅读体验。
+RSSBox-CLJ 是一个强大的 AI 驱动的 RSS 代理服务，专注于聚合、翻译和智能审核来自多个来源的内容，特别是学术文章。
 
-## ✨ 核心亮点
+## 核心功能
 
-- **📄 智能全文提取**: 集成 [Readability4J](https://github.com/dankito/Readability4J)，自动抓取文章原始链接，去除广告与侧边栏，提取纯净正文。即使原 RSS 仅提供摘要，你也能在阅读器中读到全文。
-- **🤖 沉浸式 AI 翻译**: 调用大语言模型（DeepSeek-V3, GPT-4o 等）对正文进行段落级翻译。
-  - **双语对照**: 采用“原文+译文”的方式排版，保留原汁原味的同时提供中文辅助。
-  - **样式优化**: 译文配以专门的 CSS 样式（灰色、缩进），阅读体验极佳。
-- **⚡️ 异步处理与缓存**:
-  - **秒级响应**: 首次请求时立即返回现有数据（如未翻译完成则标题显示 `[AI处理中...]`），后台异步进行抓取与翻译。
-  - **持久化存储**: 翻译结果存入 SQLite (`rssbox_cache.db`)，一次翻译，永久有效，大幅节省 API Token。
-- **🔗 聚合管理**: 自动读取 `resources/` 下的 OPML 文件，聚合多个订阅源为一个统一的 Feed。
-- **🛠 部署即忘**: 单个 Jar 包即可运行，无复杂的环境依赖。
+- **多源内容聚合**：从配置的 RSS 源聚合内容，支持 OPML 格式导入
+- **AI 翻译**：使用 DeepSeek API 将英文内容自动翻译为中文
+- **学术文章获取**：从 OpenAlex API 获取最新的学术研究文章
+- **智能文章审核**：使用 AI 评估学术文章的质量和相关性
+- **内容缓存**：使用 SQLite 数据库缓存已处理的内容，提高性能
+- **JSON Feed 输出**：提供标准的 JSON Feed 格式输出
 
-## 🚀 快速开始
+## 技术栈
 
-### 1. 环境准备
+- **编程语言**：Clojure 1.11.1
+- **Web 框架**：Compojure, Ring
+- **Web 服务器**：Jetty
+- **数据库**：SQLite (WAL 模式)
+- **AI 服务**：DeepSeek API
+- **学术 API**：OpenAlex API
+- **RSS 解析**：Rome
+- **HTML 解析**：Jsoup
+- **内容提取**：Readability4J
+- **异步处理**：core.async
 
-- Java 8+ (推荐 JDK 11 或 17)
-- [Leiningen](https://leiningen.org/) (仅开发/构建需要)
+## 项目结构
 
-### 2. 配置文件
-
-在项目根目录（或 Jar 包同级目录）创建 `secrets.edn` 文件，配置 API Key 和服务参数：
-
-```clojure
-{
- ;; AI 服务配置 (默认兼容 OpenAI 格式)
- :openai-api-key "sk-your-secret-key"
- :openai-api-url "https://api.deepseek.com/chat/completions"
- :openai-model   "deepseek-chat"
-
- ;; 服务端口
- :port           3000
-
- ;; 公网访问地址 (用于生成 Feed 中的正确链接)
- ;; 本地测试填 "http://localhost:3000"
- ;; 服务器部署填 "http://<你的公网IP>:3000" 或域名
- :public-url     "http://localhost:3000"
-}
+```
+├── src/rssbox_clj/         # 源代码目录
+│   ├── core.clj            # 主入口文件
+│   ├── handler.clj         # API 路由处理
+│   ├── processor.clj       # AI 翻译和文章处理
+│   ├── aggregator.clj      # RSS feed 聚合
+│   ├── fetcher.clj         # 学术文章获取
+│   ├── immune_fetcher.clj  # Immune 相关文章获取
+│   ├── db.clj              # 数据库操作
+│   └── config.clj          # 配置管理
+├── target/                 # 编译输出目录
+├── logs/                   # 日志目录
+├── project.clj             # 项目配置和依赖
+├── LICENSE                 # 许可证文件
+└── README.md               # 项目说明
 ```
 
-> **安全提示**: 请执行 `chmod 600 secrets.edn` 保护敏感信息。
+## API 端点
 
-### 3. 运行服务
+- **`/feed`**：获取聚合的 RSS 内容（来自配置的博客源）
+- **`/articles`**：获取学术文章内容（来自 OpenAlex API）
+- **`/`**：服务状态页面
 
-#### 开发模式
-```bash
-lein run
-```
+## 配置
 
-#### 生产模式 (Uberjar)
-1. **构建**:
+项目使用 `secrets.edn` 文件进行配置，支持以下配置项：
+
+- **`openai-api-key`**：DeepSeek API 密钥
+- **`openai-api-url`**：DeepSeek API URL（默认：`https://api.deepseek.com/chat/completions`）
+- **`openai-model`**：使用的 AI 模型（默认：`deepseek-chat`）
+- **`openalex-query`**：OpenAlex 搜索查询（默认包含癌症早期检测、AI 等相关主题）
+- **`min-impact-score`**：最小影响因子分数（默认：3.0）
+- **`lookback-days`**：搜索回溯天数（默认：3）
+- **`openalex-api-key`**：OpenAlex API 密钥（可选）
+- **`ncbi-email`**：NCBI 邮箱地址（用于 API 请求）
+- **`public-url`**：公共访问 URL（默认：`http://localhost:3000`）
+- **`port`**：服务端口（默认：8000）
+
+## 启动服务
+
+1. **安装依赖**：
+   ```bash
+   lein deps
+   ```
+
+2. **创建配置文件**：
+   ```bash
+   cp secrets.edn.example secrets.edn
+   # 编辑 secrets.edn 添加你的 API 密钥
+   ```
+
+3. **启动服务**：
+   ```bash
+   lein run
+   ```
+
+4. **构建可执行 JAR**：
    ```bash
    lein uberjar
-   ```
-   构建完成后会在 `target/uberjar/` 生成 `rssbox-clj-x.x.x-standalone.jar`。
-
-2. **运行**:
-   ```bash
-   java -jar rssbox-clj-0.1.0-SNAPSHOT-standalone.jar
+   java -jar target/rssbox-clj.jar
    ```
 
-### 4. 订阅 Feed
+## 工作原理
 
-启动成功后，在你的 RSS 阅读器（如 Reeder, Folo, NetNewsWire）中添加订阅地址：
+1. **服务启动**：
+   - 初始化 SQLite 数据库
+   - 启动翻译工作线程（默认 3 个）
+   - 启动聚合调度器（每 30 分钟更新一次）
+   - 启动文章获取调度器（每 4 小时更新一次）
 
-```
-http://localhost:3000/feed
-```
+2. **内容处理流程**：
+   - **RSS 聚合**：从配置的源获取 RSS feed，解析并排序
+   - **学术文章获取**：从 OpenAlex API 获取最新的学术文章
+   - **内容提取**：使用 Readability4J 提取文章主要内容
+   - **AI 翻译**：将英文内容翻译为中文
+   - **智能审核**：使用 AI 评估学术文章的质量和相关性
+   - **内容缓存**：将处理后的内容存入 SQLite 数据库
+   - **Feed 生成**：生成符合 JSON Feed 格式的输出
 
-## 🧩 RSS 翻译中间件
+3. **缓存机制**：
+   - 使用 SQLite 数据库缓存已处理的文章
+   - 采用 WAL 模式提高数据库性能
+   - 对已缓存的内容直接返回，避免重复处理
 
-RSSBox-CLJ 作为 RSS 阅读器与原始内容之间的中间层，负责把“摘要 RSS”升级为“可读、可译、可缓存”的沉浸式双语 Feed。
+## 性能优化
 
-**处理流水线**
+- **并发处理**：使用 future 并发获取 RSS feed
+- **批处理**：将翻译任务分块批量处理，减少 API 调用次数
+- **缓存策略**：优先使用缓存内容，避免重复处理
+- **数据库优化**：使用 SQLite WAL 模式提高写入性能
+- **任务队列**：使用 core.async 实现任务队列，避免处理积压
 
-1. **聚合源**: 读取 OPML 中的 RSS 列表，统一生成入口 Feed。
-2. **缓存判定**: 逐条检查本地 SQLite 是否已有全文与译文。
-3. **全文抽取**: 若无缓存，拉取原文 URL，Readability+Jsoup 提取正文。
-4. **分段翻译**: 将正文拆分为段落，调用 LLM 逐段翻译。
-5. **双语排版**: 合并“原文+译文”，注入专用样式，形成沉浸式阅读格式。
-6. **持久化复用**: 写入数据库，后续请求直接命中缓存。
-7. **RSS 输出**: 返回标准 RSS 2.0 XML，阅读器即刻可订阅。
+## 日志
 
-**体验策略**
+服务运行日志存储在 `logs/rssbox.log` 文件中，包含以下信息：
+- 服务启动和停止事件
+- 内容聚合和处理状态
+- API 调用结果和错误
+- 性能统计信息
 
-- **首屏优先**: 首次请求立即返回 Feed，正文翻译后台完成。
-- **渐进更新**: 翻译完成后自动补齐，阅读器刷新即可看到完整双语内容。
+## 许可证
 
-## 📦 技术栈
+MIT License
 
-- **Language**: Clojure
-- **Web Framework**: Ring + Compojure + Jetty
-- **RSS Parsing**: Rome Tools
-- **Content Extraction**: Readability4J + Jsoup
-- **Database**: SQLite + Next.JDBC
-- **Concurrency**: core.async
+## 贡献
 
-## 📝 自定义订阅源
+欢迎提交问题和改进建议！
 
-修改 `resources/hn-popular-blogs-2025.opml (https://t.co/dwAiIjlXet)` 文件，添加你想要聚合的博客或新闻源即可。重启服务后生效。
+## 联系方式
 
-## 📄 License
-
-MIT
+如有任何问题，请通过 GitHub Issues 联系我们。
